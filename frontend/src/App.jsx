@@ -1,11 +1,20 @@
+// App.tsx
 import { Application, extend } from "@pixi/react";
+import { Container, Graphics, Sprite } from "pixi.js";
 
-import MapPath from "./components/MapPath";
+import Map from "./components/Map";
+
+// extend tells @pixi/react what Pixi.js components are available
+extend({
+  Container,
+  Graphics,
+  Sprite,
+});
 
 export default function App() {
   return (
-    <Application width={800} height={600}>
-      <MapPath />
-    </Application>
+    // <Application width={window.innerWidth} height={window.innerHeight} antialias backgroundAlpha={1}>
+    <Map />
+    // </Application>
   );
 }
