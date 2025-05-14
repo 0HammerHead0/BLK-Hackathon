@@ -5,7 +5,10 @@ export default function App() {
   return (
     // <Application width={window.innerWidth} height={window.innerHeight} antialias backgroundAlpha={1}>
     // <Map />
-    <KonvaMap />
+    <div style={{ width: "100vw", height: "100vh" }}>
+      <KonvaMap />
+    </div>
+
     // </Application>
   );
 }

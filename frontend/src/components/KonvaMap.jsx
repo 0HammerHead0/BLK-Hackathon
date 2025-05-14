@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Stage, Layer, Image as KonvaImage, Shape } from "react-konva";
 import useImage from "use-image";
 
@@ -24,37 +24,95 @@ const gridPath = [
 ];
 
 export default function KonvaMapPath() {
-  const stageRef = useRef();
-  const layerRef = useRef();
-  const [image] = useImage("/central.jpg"); // replace with your image path
+  const containerRef = useRef(null);
+  const stageRef = useRef(null);
+  const layerRef = useRef(null);
+  const [image] = useImage("/central.jpg");
+
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
-  const imageWidth = 740; // 40 cols
-  const imageHeight = 1384; // 74 rows
+  const imageWidth = 740;
+  const imageHeight = 1384;
+  const buffer = 10;
+
+  const toPixels = ([y, x]) => [
+    (x / gridCols) * imageWidth,
+    (y / gridRows) * imageHeight,
+  ];
+
+  // Resize observer to detect parent size
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        setContainerSize({ width: clientWidth, height: clientHeight });
+      }
+    };
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, []);
+
+useEffect(() => {
+  if (!image || !containerSize.width || !containerSize.height) return;
+
+  const pixelPoints = gridPath.map(toPixels);
+  const xs = pixelPoints.map(p => p[0]);
+  const ys = pixelPoints.map(p => p[1]);
+
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const pathWidth = maxX - minX;
+  const pathHeight = maxY - minY;
+
+  const stageWidth = containerSize.width - 2 * buffer;
+  const stageHeight = containerSize.height - 2 * buffer;
+
+  const scaleX = stageWidth / pathWidth;
+  const scaleY = stageHeight / pathHeight;
+  const finalScale = Math.min(scaleX, scaleY);
+
+  const offsetX = -minX * finalScale + (containerSize.width - pathWidth * finalScale) / 2;
+  const offsetY = -minY * finalScale + (containerSize.height - pathHeight * finalScale) / 2;
+
+  setScale(finalScale);
+  setPosition({ x: offsetX, y: offsetY });
+
+  // ⬇️ Manually set stage position for immediate re-center
+  if (stageRef.current) {
+    stageRef.current.position({ x: offsetX, y: offsetY });
+    stageRef.current.scale({ x: finalScale, y: finalScale });
+    stageRef.current.batchDraw();
+  }
+}, [image, containerSize]);
+
 
   const handleWheel = (e) => {
     e.evt.preventDefault();
     const scaleBy = 1.05;
     const stage = stageRef.current;
     const oldScale = stage.scaleX();
+    const pointer = stage.getPointerPosition();
     const mousePointTo = {
-      x: stage.getPointerPosition().x / oldScale - stage.x() / oldScale,
-      y: stage.getPointerPosition().y / oldScale - stage.y() / oldScale,
+      x: pointer.x / oldScale - stage.x() / oldScale,
+      y: pointer.y / oldScale - stage.y() / oldScale,
     };
 
     const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
     setScale(newScale);
     setPosition({
-      x: -(mousePointTo.x - stage.getPointerPosition().x / newScale) * newScale,
-      y: -(mousePointTo.y - stage.getPointerPosition().y / newScale) * newScale,
+      x: -(mousePointTo.x - pointer.x / newScale) * newScale,
+      y: -(mousePointTo.y - pointer.y / newScale) * newScale,
     });
   };
-
-  const toPixels = ([y, x]) => [
-    (x / gridCols) * imageWidth,
-    (y / gridRows) * imageHeight,
-  ];
 
   const renderCurvedPath = () => {
     const curveFactor = 0.4;
@@ -91,10 +149,7 @@ export default function KonvaMapPath() {
               const nextCtrl = adjust(nextMid, curr, curveFactor);
 
               ctx.lineTo(...toPixels(prevCtrl));
-              ctx.quadraticCurveTo(
-                ...toPixels(curr),
-                ...toPixels(nextCtrl)
-              );
+              ctx.quadraticCurveTo(...toPixels(curr), ...toPixels(nextCtrl));
             } else {
               ctx.lineTo(...toPixels(curr));
             }
@@ -112,23 +167,25 @@ export default function KonvaMapPath() {
   };
 
   return (
-    <Stage
-      width={window.innerWidth}
-      height={window.innerHeight}
-      scaleX={scale}
-      scaleY={scale}
-      x={position.x}
-      y={position.y}
-      onWheel={handleWheel}
-      draggable
-      ref={stageRef}
-    >
-      <Layer ref={layerRef}>
-        {image && (
-          <KonvaImage image={image} width={imageWidth} height={imageHeight} />
-        )}
-        {renderCurvedPath()}
-      </Layer>
-    </Stage>
+    <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
+      <Stage
+        width={containerSize.width}
+        height={containerSize.height}
+        scaleX={scale}
+        scaleY={scale}
+        x={position.x}
+        y={position.y}
+        onWheel={handleWheel}
+        draggable
+        ref={stageRef}
+      >
+        <Layer ref={layerRef}>
+          {image && (
+            <KonvaImage image={image} width={imageWidth} height={imageHeight} />
+          )}
+          {renderCurvedPath()}
+        </Layer>
+      </Stage>
+    </div>
   );
 }
